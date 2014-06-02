@@ -2,7 +2,7 @@
 #                                                       ABOUT
 
 # Game of Light
-# v0.2
+# v0.3
 # Cole Hatton
 
 # Simulation of an LED phototransistor feedback grid
@@ -20,8 +20,8 @@
 #           Capacitance needed at gate for best results
 
 #   Hex grid:
-#       B_tri looks better than B1 over a wide range of settings
-#       B_tri: pSensitivity > 0.08
+#       B_3 looks better than B_6 over a wide range of settings
+#       B_3: pSensitivity > 0.08
 #       B_6: pSensitivity ~ 0.025, pVRefLow < 0.5
 
 #   Square grid:
@@ -64,12 +64,14 @@ if GRID is SQUARE:
     WINDOW_HEIGHT =  int(H * DS)
 
 VDD = 5.0             # Vdd potential [V]
-VN = 1.5              # A bit less than Vgth for N channel FET [V]
-VP = 3.5              # A bit more than Vgth for P channel FET [V]
+VN = 1.5              # A bit less than Vgth for N channel FET [V] 1.2 is minimum for affordable N-FET
+VP = VDD - 1.5        # A bit more than Vgth for P channel FET [V] VDD - 1.2 is maximum for affordable P-FET
 
-RQI_BASE = 100       # 1000/(RQ_min * RQi_max)
+RQ_ON = 10          # Minimum combined FET on-resistance (Vgs = VDD / 2) [Ohm]
+                    #       Will be 10Ohm at most, willing to pay for down to 1.2Ohm
+RQI_BASE = 1000 / ((VP - VN)/2)**2 / RQ_ON # pre-calc'd inverse base resistance [1/kOhm] for RQi fn
 
-VG_MIN = -10.0       # Min Voltage for phototrans circuit [v]
+VG_MIN = -15.0       # Min Voltage for phototrans circuit [v]
 VG_MAX = 10.0       # Max Voltage for phototrans cirucit [V]
 
 
@@ -161,10 +163,9 @@ b_ext = [[0 for i in range(H) ] for j in range(W)]
 
 x_index = 1
 y_index = 1
-b_ext_update = 1
 
 def PowerCycle():
-    global b, vg, rqi, vd, iD, b_ext, b_ext_update
+    global b, vg, rqi, vd, iD, b_ext
     b = [[0 for i in range(H) ] for j in range(W)]
     vg = [[0 for i in range(H) ] for j in range(W)]
     rqi = [[0 for i in range(H) ] for j in range(W)]
@@ -173,7 +174,6 @@ def PowerCycle():
 
     b_ext = [[0 for i in range(H) ] for j in range(W)]
 
-    b_ext_update = 0
 
 
 def ResetActiveNodes():
@@ -298,7 +298,7 @@ def FlashLightValidPos(x,y):
     return 1 if x >= 0 and x < W and y >= 0 and y < H else 0
 
 def FlashLightClearLast(x,y):
-    global x_index, y_index, b_ext_update
+    global x_index, y_index
     if GRID is HEX:
         for i in flashLightRange:
             for j in flashLightRange:
@@ -311,7 +311,7 @@ def FlashLightClearLast(x,y):
                     b_ext[x_index + i][y_index + j] = 0
 
 def FlashLightPos(x,y):
-    global x_index, y_index, b_ext_update
+    global x_index, y_index
     if GRID is HEX:
         x_index = int((x + y/2.0)/DS - H/2.0 + 0.87)
         y_index = int((2/(3.0**0.5) * y)/DS - 0.5)
@@ -354,6 +354,7 @@ if GRID is SQUARE:
                 if FlashLightValidPos(x_index + i, y_index + j):
                     active_nodes[x_index + i][y_index + j] ^= 1
    
+
 
 
 
