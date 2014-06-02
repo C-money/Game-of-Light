@@ -2,7 +2,7 @@
 #                                                       ABOUT
 
 # Game of Light
-# v0.1
+# v0.2
 # Cole Hatton
 
 # Simulation of an LED phototransistor feedback grid
@@ -48,11 +48,11 @@ DR = 8              # Dot radius [px]
 
 HEX = 0             # Hexagonal grid type
 SQUARE = 1          # Square grid type
-GRID = SQUARE       # Grid type set here
+GRID = HEX       # Grid type set here
 
 # IMPORTANT FINDING -   Simulation produces more interesting patterns when PSR is left
 #                       at 1, which is most similar to Conway's Game of Life
-PSR =1     # Phototransistor Sensing Range - Max distance (in nodes) of sensed LEDs
+PSR = 1         # Phototransistor Sensing Range - Max distance (in nodes) of sensed LEDs
 W_ACTIVE = W - PSR     # all active nodes exist from PSR to W_ACTIVE - 1 and PSR to H_ACTIVE - 1
 H_ACTIVE = H - PSR
 
@@ -91,16 +91,16 @@ P_SENSE_STEP = 0.001    # step size for phototrans sensitivity change
 # Step Scale approaching 0 is equivalent to larger capacitance
 
 vgStepScale = STEP_SCALE_BASE**(-10)     # responsiveness of gate voltage to change in light sensed at phototransistor
-vdStepScale = STEP_SCALE_BASE**(-27)    # responsiveness of drain voltage (voltage between FET drains) to LED / FET circuit
+vdStepScale = STEP_SCALE_BASE**(-28)    # responsiveness of drain voltage (voltage between FET drains) to LED / FET circuit
 
 # Phototransistor Sensitivity - Brightness to Steady State Gate Voltage
 # has led brightness at phototransistor and phototrans resistor embedded in value
-pSensitivity = 0.023
+pSensitivity = 0.085
 
 # Phototransistor side of the circuit will be powered between two reference voltages
 #       to allow for tuning of system and more fun
 
-pVRefLow = -0.1     # phototransistor circuit low voltage reference
+pVRefLow = -0.6     # phototransistor circuit low voltage reference
 pVRefHigh = 4.95     # phototransistor circuit high voltage reference
 
 # Flash Light tool used to initialize and interact with simulation
@@ -164,7 +164,7 @@ y_index = 1
 b_ext_update = 1
 
 def PowerCycle():
-    global b, vg, rqi, vc, iD, b_ext, b_ext_update
+    global b, vg, rqi, vd, iD, b_ext, b_ext_update
     b = [[0 for i in range(H) ] for j in range(W)]
     vg = [[0 for i in range(H) ] for j in range(W)]
     rqi = [[0 for i in range(H) ] for j in range(W)]
@@ -188,7 +188,8 @@ def ResetActiveNodes():
 #                                                       Circuit functions
 
 # Brightness functions - only one enabled at a time
-# Generalized brightness summing function for PSR as positive int
+
+# Generalized hex brightness summing function for PSR as positive int
 def B_hex(x,y):
     light_sensed = 0.0
     for i in range(1, PSR + 1):
@@ -196,6 +197,18 @@ def B_hex(x,y):
             light_sensed += d[i][j] * (iD[x + i][y + j] +
                                        iD[x - j][y + i - j] +
                                        iD[x + j - i][y - i])
+    b[x][y] = light_sensed + b_ext[x][y]
+
+
+# Generalized square brightness summing function for PSR as positive int
+def B_square(x,y):
+    light_sensed = 0.0
+    for i in range(1, PSR + 1):
+        for j in range(PSR + 1):
+            light_sensed += d[i][j] * (iD[x + i][y + j] +
+                                       iD[x - j][y + i] +
+                                       iD[x - i][y - j] +
+                                       iD[x + j][y - i])
     b[x][y] = light_sensed + b_ext[x][y]
 
 # Brightness summing function for PSR = 1, 6 adjacent LEDs summed
@@ -214,6 +227,8 @@ def B_3(x,y):
 def B_4(x,y):
     light_sensed = (iD[x + 1][y] + iD[x][y + 1] + iD[x][y - 1] + iD[x - 1][y])
     b[x][y] = light_sensed + b_ext[x][y]
+
+
 
 # Gate voltage (approaches b[x][y] * pSensitivity + pVRefLow)
 def VG(x,y):
@@ -253,7 +268,7 @@ def Id_at_Vd(v):
 
 
 
-def VgOffset(inc):
+def VRefLowInc(inc):
     global pVRefLow
     pVRefLow += inc
     if pVRefLow > VG_MAX:
@@ -261,7 +276,7 @@ def VgOffset(inc):
     elif pVRefLow < VG_MIN:
         pVRefLow = VG_MIN
 
-def VgOffset2(inc):
+def VRefHighInc(inc):
     global pVRefHigh
     pVRefHigh += inc
     if pVRefHigh > VG_MAX:
@@ -345,7 +360,7 @@ if GRID is SQUARE:
 
 #                                                       Step function
 
-B_fn = B_4
+B_fn = B_3
 
 def Step():
     global lastTime, stepTime
@@ -376,14 +391,14 @@ def Step():
 
 def DispSettings():
     text_vg = font.render("Vg Step Size: " + str(round(vgStepScale, 5)), 1, (100, 30, 10))
-    text_vc = font.render("Vd Step Size: " + str(round(vdStepScale, 5)), 1, (100, 30, 10))
+    text_vd = font.render("Vd Step Size: " + str(round(vdStepScale, 5)), 1, (100, 30, 10))
     text_vgo = font.render("Low VRef: " + str(pVRefLow), 1, (100, 30, 10))
     text_vgo2 = font.render("High VRef: " + str(pVRefHigh), 1, (100, 30, 10))
     text_psns = font.render("Sensitivity: " + str(pSensitivity), 1, (100, 30, 10))
     text_steprate = font.render("Step Rate: " + str(round(1000.0 / stepTime, 1)), 1, (100, 30, 10))
     background.fill((5, 2, 1))
     background.blit(text_vg, textpos_vg)
-    background.blit(text_vc, textpos_vc)
+    background.blit(text_vd, textpos_vd)
     background.blit(text_vgo, textpos_vgo)
     background.blit(text_vgo2, textpos_vgo2)
     background.blit(text_psns, textpos_psns)
@@ -406,7 +421,7 @@ background.fill((5, 2, 1))
 # Display some text
 font = pygame.font.SysFont("Arial", 25, bold=False,italic=False)
 text_vg = font.render("Vg Step Size: " + str(round(vgStepScale, 5)), 1, (100, 30, 10))
-text_vc = font.render("Vd Step Size: " + str(round(vdStepScale, 5)), 1, (100, 30, 10))
+text_vd = font.render("Vd Step Size: " + str(round(vdStepScale, 5)), 1, (100, 30, 10))
 text_vgo = font.render("Low VRef: " + str(pVRefLow), 1, (100, 30, 10))
 text_vgo2 = font.render("High VRef: " + str(pVRefHigh), 1, (100, 30, 10))
 text_psns = font.render("Sensitivity: " + str(pSensitivity), 1, (100, 30, 10))
@@ -415,9 +430,9 @@ text_steprate = font.render("Step Rate: " + str(round(1000.0 / stepTime, 1)), 1,
 textpos_vg = text_vg.get_rect()
 textpos_vg.right = background.get_rect().right - 10
 textpos_vg.bottom = background.get_rect().bottom - 10
-textpos_vc = text_vc.get_rect()
-textpos_vc.right = background.get_rect().right - 10
-textpos_vc.bottom = background.get_rect().bottom - 40
+textpos_vd = text_vd.get_rect()
+textpos_vd.right = background.get_rect().right - 10
+textpos_vd.bottom = background.get_rect().bottom - 40
 textpos_vgo = text_vgo.get_rect()
 textpos_vgo.right = background.get_rect().right - 10
 textpos_vgo.bottom = background.get_rect().bottom - 70
@@ -432,7 +447,7 @@ textpos_steprate.right = background.get_rect().right - 10
 textpos_steprate.bottom = background.get_rect().bottom - 160
 
 background.blit(text_vg, textpos_vg)
-background.blit(text_vc, textpos_vc)
+background.blit(text_vd, textpos_vd)
 background.blit(text_vgo, textpos_vgo)
 background.blit(text_vgo2, textpos_vgo2)
 background.blit(text_psns, textpos_psns)
@@ -479,13 +494,13 @@ while True:
                     FlashLightSize(-1)
                     FlashLightPos(mouse_x, mouse_y)
                 if keycode is 119:      #'w'
-                    VgOffset(0.1)
+                    VRefLowInc(0.1)
                 if keycode is 115:      #'s'
-                    VgOffset(-0.1)
+                    VRefLowInc(-0.1)
                 if keycode is 113:      #'q'
-                    VgOffset2(0.05)
+                    VRefHighInc(0.05)
                 if keycode is 97:       #'a'
-                    VgOffset2(-0.05)                   
+                    VRefHighInc(-0.05)                   
                 if keycode is 118:      #'v'
                     FlashLightBrightness(10)
                     FlashLightClearLast(mouse_x, mouse_y)
