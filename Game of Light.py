@@ -2,7 +2,7 @@
 #                                                       ABOUT
 
 # Game of Light
-# v0.3
+# v0.4
 # Cole Hatton
 
 # Simulation of an LED phototransistor feedback grid
@@ -32,23 +32,29 @@
 #                                                       IMPORTS
 
 import sys
+import os
+import time
 
 import pygame
 pygame.init()
+from random import random
 
+#os.nice(10);
+os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (0,0)
 
 
 #                                                       CONSTANTS
 
-W = 29              # LED grid width including inactive LEDs for no edge index checking
-H = 29               # LED grid height ''
+W = 41              # LED grid width including inactive LEDs for no edge index checking
+H = 41              # LED grid height ''
 
-DS = 20             # Dot spacing [px]
-DR = 8              # Dot radius [px]
+DS = 28             # Dot spacing [px]
+DR = 12               # Dot radius [px]
 
 HEX = 0             # Hexagonal grid type
 SQUARE = 1          # Square grid type
 GRID = HEX       # Grid type set here
+
 
 # IMPORTANT FINDING -   Simulation produces more interesting patterns when PSR is left
 #                       at 1, which is most similar to Conway's Game of Life
@@ -75,11 +81,11 @@ VG_MIN = -15.0       # Min Voltage for phototrans circuit [v]
 VG_MAX = 10.0       # Max Voltage for phototrans cirucit [V]
 
 
-FLR_MAX = 12        # max flashLightRadius
+FLR_MAX = 18        # max flashLightRadius
 
 FLB_MAX = 250       # max flashLightBrightness
 
-STEP_SCALE_BASE = 1.2   # base for gate and LED step scales
+STEP_SCALE_BASE = 1.1   # base for gate and LED step scales
 
 P_SENSE_STEP = 0.001    # step size for phototrans sensitivity change
 
@@ -92,18 +98,23 @@ P_SENSE_STEP = 0.001    # step size for phototrans sensitivity change
 # Step Scale approaching 1 is equivalent to 0 or tiny capacitance
 # Step Scale approaching 0 is equivalent to larger capacitance
 
-vgStepScale = STEP_SCALE_BASE**(-10)     # responsiveness of gate voltage to change in light sensed at phototransistor
-vdStepScale = STEP_SCALE_BASE**(-28)    # responsiveness of drain voltage (voltage between FET drains) to LED / FET circuit
+vgStepScale = STEP_SCALE_BASE**(-19)   #1.2^-10  # responsiveness of gate voltage to change in light sensed at phototransistor
+vdStepScale = STEP_SCALE_BASE**(-53)   #1.2^-28 # responsiveness of drain voltage (voltage between FET drains) to LED / FET circuit
 
 # Phototransistor Sensitivity - Brightness to Steady State Gate Voltage
 # has led brightness at phototransistor and phototrans resistor embedded in value
 pSensitivity = 0.085
+pSensVariation = [[random()*0.2 + 0.9 for i in range(H) ] for j in range(W)]
+#Implement pSensVariation as 2D array of rand(0.9, 1.1)
 
 # Phototransistor side of the circuit will be powered between two reference voltages
 #       to allow for tuning of system and more fun
 
 pVRefLow = -0.6     # phototransistor circuit low voltage reference
 pVRefHigh = 4.95     # phototransistor circuit high voltage reference
+
+
+idVariation = [[random()*0.2 + 0.9 for i in range(H) ] for j in range(W)]
 
 # Flash Light tool used to initialize and interact with simulation
 # Effect of flashlights in real life depends heavily on lightpiping and
@@ -179,7 +190,8 @@ def PowerCycle():
 def ResetActiveNodes():
     global active_nodes
     if GRID is HEX:
-        active_nodes = [[(1 if (i - (W - 1)/ 2.0) * (j - (H - 1)/ 2.0) > -80 else 0) for j in range(H)] for i in range(W)]
+        #active_nodes = [[(1 if (i - (W - 1)/ 2.0) * (j - (H - 1)/ 2.0) > -80 else 0) for j in range(H)] for i in range(W)]
+        active_nodes = [[(1 if (i - j < (W - 1)/ 2.0 and j - i < (W - 1)/ 2.0) else 0) for j in range(H)] for i in range(W)]
     if GRID is SQUARE:
         active_nodes = [[1 for j in range(H)] for i in range(W)]       
 
@@ -233,7 +245,13 @@ def B_4(x,y):
 # Gate voltage (approaches b[x][y] * pSensitivity + pVRefLow)
 def VG(x,y):
     global pVRefLow
-    vg[x][y] += (b[x][y] * pSensitivity + pVRefLow - vg[x][y]) * vgStepScale
+    vg[x][y] += (b[x][y] * pSensitivity + pVRefLow - vg[x][y]) * vgStepScale #multiply pSensitivity by pSensVariation
+    if vg[x][y] > pVRefHigh:
+        vg[x][y] = pVRefHigh
+
+def VGwithRand(x,y):
+    global pVRefLow
+    vg[x][y] += (b[x][y] * pSensitivity * pSensVariation[x][y] + pVRefLow - vg[x][y]) * vgStepScale #multiply pSensitivity by pSensVariation
     if vg[x][y] > pVRefHigh:
         vg[x][y] = pVRefHigh
 
@@ -259,11 +277,19 @@ SLOPE = 0.17421485#Id_data[1]/Vc_data[1] #slope in linear region
 V_Q_TH = 2.3860976#Vc_data[2] #minimum voltage for quadratic region
 
 # LED current (proportional to brightness) at Cap voltage
-def Id_at_Vd(v):
+def Id_at_Vd(v, x, y):
     if (v > V_Q_TH):
-        return QA*v**2 + QB*v + QC
+        ret = QA*v**2 + QB*v + QC
     else:
-        return SLOPE*v
+        ret = SLOPE*v
+    return ret #Implement idVariation as 2D array of rand(0.9, 1.1)
+
+def Id_at_Vd_withRand(v, x, y):
+    if (v > V_Q_TH):
+        ret = QA*v**2 + QB*v + QC
+    else:
+        ret = SLOPE*v
+    return ret * idVariation[x][y] #Implement idVariation as 2D array of rand(0.9, 1.1)
 
 
 
@@ -380,11 +406,12 @@ def Step():
     for x in range(PSR, W_ACTIVE):
         for y in range(PSR, H_ACTIVE):
             if active_nodes[x][y] is 1:
-                iD[x][y] = Id_at_Vd(vd[x][y])
+                iD[x][y] = Id_at_Vd(vd[x][y], x, y)
             else:
                 iD[x][y] = 0
             bp = int(iD[x][y] * 7)
             pygame.draw.circle(window, (b_ext[x][y], bp, bp), (dot_x_pos[x][y], dot_y_pos[y]), DR, 0)
+            #pygame.gfxdraw.aacircle(window, dot_x_pos[x][y], dot_y_pos[y], DR, (b_ext[x][y], bp, bp))
     time = pygame.time.get_ticks()
     stepTime = time - lastTime
     lastTime = time;
@@ -397,7 +424,7 @@ def DispSettings():
     text_vgo2 = font.render("High VRef: " + str(pVRefHigh), 1, (100, 30, 10))
     text_psns = font.render("Sensitivity: " + str(pSensitivity), 1, (100, 30, 10))
     text_steprate = font.render("Step Rate: " + str(round(1000.0 / stepTime, 1)), 1, (100, 30, 10))
-    background.fill((5, 2, 1))
+    background.fill((0, 0, 0))
     background.blit(text_vg, textpos_vg)
     background.blit(text_vd, textpos_vd)
     background.blit(text_vgo, textpos_vgo)
@@ -412,12 +439,13 @@ def DispSettings():
 
 
 #create the window
-window = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT)) 
+window = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.FULLSCREEN|pygame.ASYNCBLIT)#(WINDOW_WIDTH, WINDOW_HEIGHT)) 
+pygame.mouse.set_visible(False)
 
 # Fill background
 background = pygame.Surface(window.get_size())
 background = background.convert()
-background.fill((5, 2, 1))
+background.fill((0, 0, 0))
 
 # Display some text
 font = pygame.font.SysFont("Arial", 25, bold=False,italic=False)
@@ -468,71 +496,78 @@ pygame.display.flip()
 mouse_x = 0
 mouse_y = 0
 
+
 #input handling (somewhat boilerplate code):
 while True:
+    #time.sleep(0.005)
+    DispSettings()
     Step()
-    pygame.display.flip()
+    pygame.display.update()
+
     
     for event in pygame.event.get(): 
-        if event.type == pygame.QUIT:
-            pygame.quit();
+        if event.type is pygame.QUIT:
+            pygame.quit()
             sys.exit(0)
         else:
             #print event
             
-            if event.type == 3:                     #keystroke
+            if event.type is 3:                     #keystroke
                 keycode = event.dict.values()[1]
-                if keycode is 114:      #'r'
+                if keycode is 48:
+                    pygame.quit()
+                    sys.exit(0)
+                elif keycode is 114:      #'r'
                     PowerCycle()
-                if keycode is 116:      #'t'
+                elif keycode is 116:      #'t'
                     ResetActiveNodes()
-                if keycode is 102:      #'f'
+                elif keycode is 102:      #'f'
                     FlashLightClearLast(mouse_x, mouse_y)
                     FlashLightSize(1)
                     FlashLightPos(mouse_x, mouse_y)
-                if keycode is 100:      #'d'
+                elif keycode is 100:      #'d'
                     FlashLightClearLast(mouse_x, mouse_y)
                     FlashLightSize(-1)
                     FlashLightPos(mouse_x, mouse_y)
-                if keycode is 119:      #'w'
+                elif keycode is 119:      #'w'
                     VRefLowInc(0.1)
-                if keycode is 115:      #'s'
+                elif keycode is 115:      #'s'
                     VRefLowInc(-0.1)
-                if keycode is 113:      #'q'
+                elif keycode is 113:      #'q'
                     VRefHighInc(0.05)
-                if keycode is 97:       #'a'
+                elif keycode is 97:       #'a'
                     VRefHighInc(-0.05)                   
-                if keycode is 118:      #'v'
+                elif keycode is 118:      #'v'
                     FlashLightBrightness(10)
                     FlashLightClearLast(mouse_x, mouse_y)
                     FlashLightPos(mouse_x, mouse_y)
-                if keycode is 99:       #'c'
+                elif keycode is 99:       #'c'
                     FlashLightBrightness(-10)
                     FlashLightClearLast(mouse_x, mouse_y)
                     FlashLightPos(mouse_x, mouse_y)
-                if keycode is 105:      #'i'
+                elif keycode is 105:      #'i'
                     vgStepScale *= STEP_SCALE_BASE
-                    DispSettings()
-                if keycode is 107:      #'k'
-                    vgStepScale /= STEP_SCALE_BASE
-                if keycode is 111:      #'o'
                     vdStepScale *= STEP_SCALE_BASE
-                if keycode is 108:      #'l'
+                elif keycode is 107:      #'k'
+                    vgStepScale /= STEP_SCALE_BASE
                     vdStepScale /= STEP_SCALE_BASE
-                if keycode is 117:      #'u'
+                elif keycode is 111:      #'o'
+                    vdStepScale *= STEP_SCALE_BASE
+                elif keycode is 108:      #'l'
+                    vdStepScale /= STEP_SCALE_BASE
+                elif keycode is 117:      #'u'
                     pSensitivity += P_SENSE_STEP
-                if keycode is 106:      #'j'
+                elif keycode is 106:      #'j'
                     pSensitivity -= P_SENSE_STEP
-                DispSettings()
+                #DispSettings()
                                    
-            if event.type == 4:                     #mouse move
+            if event.type is 4:                     #mouse move
                 mouse_x = event.dict.values()[1][0]
                 mouse_y = event.dict.values()[1][1]
                 FlashLightClearLast(mouse_x, mouse_y)
                 FlashLightPos(mouse_x, mouse_y)
 
-            if event.type == 6:                     #mouse button up
+            if event.type is 6:                     #mouse button up
                 ToggleNodes(mouse_x, mouse_y)
-                
 
 
